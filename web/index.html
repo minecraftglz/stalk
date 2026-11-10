@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>stalk · 视奸</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'%3E%3Cpath d='M32 12C16 12 4 32 4 32s12 20 28 20 28-20 28-20S48 12 32 12z' fill='%230f172a' stroke='%23ec4899' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='32' r='11' fill='%23ec4899'/%3E%3Ccircle cx='36.5' cy='27.5' r='3.5' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/main.css">
+
+<!-- Umami 统计 -->
+<script defer src="https://analytics.minecraftglz.top/random-string.js" data-website-id="b9d62e83-f50c-421c-81d9-6e410827c3bb"></script>
+
+<!-- 百度统计 -->
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?107a8140bc749b533be64a2c01580f4d";
+  var s = document.getElementsByTagName("script")[0];
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+
+<script>
+// 主题预置：刷新时先读偏好，避免浅→深闪一下（放在 head 内，先于 body 渲染）
+// 只有 light | dark 两态，默认浅色（已移除「跟随系统」）
+(function () {
+  try {
+    var mode = localStorage.getItem('wt-theme-mode') === 'dark' ? 'dark' : 'light';
+    if (mode === 'dark') document.documentElement.classList.add('dark');
+    document.documentElement.setAttribute('data-theme-mode', mode);
+    // 语言：优先用户选择，其次跟随系统（zh / en / fr）
+    var nav = (navigator.language || 'zh').toLowerCase();
+    var lang = localStorage.getItem('wt-lang') ||
+      (nav.startsWith('zh') ? 'zh' : (nav.startsWith('fr') ? 'fr' : 'en'));
+    document.documentElement.setAttribute('lang', lang);
+    document.documentElement.setAttribute('data-lang', lang);
+  } catch (e) {}
+})();
+</script>
+</head>
+<body>
+<!-- 樱花花瓣：背景层（由 effects.js 生成花瓣元素） -->
+<div class="sakura-container sakura-global" aria-hidden="true"></div>
+<!-- 夜色萤火：仅深色模式显示（effects.js 生成光点） -->
+<div class="firefly-container firefly-global" aria-hidden="true"></div>
+<!-- 启动占位层：太阳加载动画，Vue 挂载完成后移除 -->
+<div id="boot">
+  <div class="boot-sun">
+    <div class="sun-body">
+      <div class="ray" style="--i:1"></div>
+      <div class="ray" style="--i:2"></div>
+      <div class="ray" style="--i:3"></div>
+      <div class="ray" style="--i:4"></div>
+      <div class="ray" style="--i:5"></div>
+      <div class="ray" style="--i:6"></div>
+      <div class="ray" style="--i:7"></div>
+      <div class="ray" style="--i:8"></div>
+    </div>
+    <div class="eye"></div>
+  </div>
+  <div class="boot-horizon"></div>
+</div>
+<div id="app" v-cloak>
+  <!-- 入口首页：lookme 风格（背景视差 + 毛玻璃 + 当前状态），点击进入监控面板 -->
+  <div class="landing" v-if="route === 'home'">
+    <!-- 背景层：随鼠标移动产生视差 -->
+    <div class="bg-layer" :style="bgParallaxStyle">
+      <img class="bg-img" src="/assets/home-bg.webp" alt="">
+    </div>
+    <div class="bg-overlay"></div>
+    <!-- 首页花瓣：盖在背景图上、位于毛玻璃卡片之下 -->
+    <div class="sakura-container sakura-landing" aria-hidden="true"></div>
+    <div class="firefly-container firefly-landing" aria-hidden="true"></div>
+
+    <div class="landing-inner">
+      <h1 class="landing-h1">似了么？</h1>
+
+      <div class="pstatus-card">
+        <div class="landing-note">{{ ownerName }}'s Status:</div>
+        <div class="pstatus-label">{{ t('app.ownerStatus') }}</div>
+        <div class="pstatus-app" :class="{ changed: landingChanged }">{{ landingAppText }}</div>
+        <div class="pstatus-mood">{{ t('landing.moodPrefix') }}{{ landingMood }}</div>
+      </div>
+
+      <!-- 实时更新状态 + 最后更新时间，放在同一行 -->
+      <div class="landing-meta">
+        <span class="sync"><span class="spin">🔄</span> {{ t('app.syncing') }}</span>
+        <span class="meta-sep">·</span>
+        <span class="tm">{{ t('app.lastUpdate') }} {{ landingTime }}</span>
+      </div>
+      <div><button class="landing-btn" @click="enterDashboard">{{ t('app.enterDashboard') }}</button></div>
+
+      <!-- 版权 + 备案信息 -->
+      <footer class="site-footer">
+        <div class="footer-inner">
+          <div class="footer-copy">© 2026 Landigo's Garden</div>
+          <div class="footer-beian">
+            <a class="footer-icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">鄂ICP备2025130292号</a>
+            <a class="footer-police" href="https://beian.mps.gov.cn/#/query/webSearch?code=42010402001653" target="_blank" rel="noopener noreferrer">
+              <img src="/assets/gongan.png" alt="">
+              <span>鄂公网安备42010402001653号</span>
+            </a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- 手机端：左上角设备抽屉开关 + 遮罩（桌面端隐藏） -->
+  <button class="mobile-drawer-toggle" v-if="route === 'app'" @click="showDeviceDrawer = !showDeviceDrawer"
+          :title="showDeviceDrawer ? t('device.drawerClose') : t('device.drawerOpen')">{{ showDeviceDrawer ? '✕' : '☰' }}</button>
+  <!-- 抽屉引导提示气泡：首次访问出现，点过按钮后永久不再显示 -->
+  <div class="drawer-hint" v-if="route === 'app' && showDrawerHint" @click.stop>
+    <span class="drawer-hint-text">{{ t('device.drawerHint') }}</span>
+    <button class="drawer-hint-close" @click="dismissDrawerHint" aria-label="close">×</button>
+    <i class="drawer-hint-arrow"></i>
+  </div>
+  <div class="drawer-backdrop" :class="{ show: showDeviceDrawer }" v-if="route === 'app'" @click="showDeviceDrawer = false"></div>
+
+  <!-- 侧边栏：设备列表 -->
+  <aside class="sidebar" :class="{ open: showDeviceDrawer }" v-if="route === 'app'">
+    <div class="logo">
+      <small>{{ t('device.title') }}</small>
+    </div>
+
+    <div class="online-toggle" @click="showInteractive = !showInteractive">
+      <label>{{ t('device.interactive') }}</label>
+      <div class="toggle" :class="{ on: showInteractive }"></div>
+    </div>
+
+    <div class="device-list">
+      <div v-for="dev in sortedDevices" :key="dev._id"
+           class="device-item" :class="{ active: selectedDevice === dev._id }"
+           @click="selectDevice(dev._id)">
+        <div class="top">
+          <span class="name">
+            <span>{{ deviceIcon(dev.type) }}</span>
+            {{ dev.name }}
+            <small>({{ dev.type }})</small>
+          </span>
+          <span class="badge" :class="dev.screenOff ? 'screenoff' : (dev.online ? 'online' : 'offline')">{{ dev.screenOff ? t('device.screenoff') : (dev.online ? (dev.idle ? t('device.idle') : t('device.online')) : t('device.offline')) }}</span>
+        </div>
+        <div class="meta">
+          <span v-if="dev.battery != null">🔋 {{ dev.battery }}%{{ dev.isCharging ? ' ⚡' : '' }}</span>
+          <span>{{ timeAgo(dev.lastSeen) }}</span>
+        </div>
+
+        <!-- 状态详情（仅选中设备时展开） -->
+        <div class="dev-status" v-if="selectedDevice === dev._id">
+          <!-- 电脑状态 -->
+          <div v-if="dev.type === 'computer'" class="dstat-grid">
+            <div class="dstat-tile" v-if="dev.status && dev.status.cpu != null">
+              <div class="k">🖥️ {{ t('device.cpu') }}</div>
+              <div class="v blue">{{ dev.status.cpu }}%</div>
+              <div class="dstat-bar"><i :style="{ width: Math.min(100, dev.status.cpu) + '%' }"></i></div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.mem != null">
+              <div class="k">🧠 {{ t('device.mem') }}</div>
+              <div class="v amber">{{ dev.status.mem }}%</div>
+              <div class="dstat-bar"><i class="mem" :style="{ width: Math.min(100, dev.status.mem) + '%' }"></i></div>
+            </div>
+            <div class="dstat-tile wide" v-if="dev.status && dev.status.path">
+              <div class="k">📁 {{ t('device.path') }}</div>
+              <div class="v sm">{{ dev.status.path }}</div>
+            </div>
+          </div>
+
+          <!-- 手机 / Pad 信息 -->
+          <div v-else class="dstat-grid">
+            <div class="dstat-tile" v-if="dev.battery != null">
+              <div class="k">🔋 {{ t('device.battery') }}</div>
+              <div class="v" :class="dev.battery <= 20 ? 'red' : 'green'">{{ dev.battery }}%</div>
+              <div class="sub">{{ dev.isCharging ? t('device.charging') : t('device.notCharging') }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.temp">
+              <div class="k">🌡️ {{ t('device.temp') }}</div>
+              <div class="v" :class="parseFloat(dev.status.temp) >= 38 ? 'red' : ''">{{ dev.status.temp }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.screenState">
+              <div class="k">📱 {{ t('device.screenState') }}</div>
+              <div class="v" :class="screenStateText(dev.status.screenState) === t('device.screenoff') ? '' : 'green'">{{ screenStateText(dev.status.screenState) }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.wifi">
+              <div class="k">📶 {{ t('device.wifi') }}</div>
+              <div class="v">{{ dev.status.wifi }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.mobileData">
+              <div class="k">📡 {{ t('device.mobileData') }}</div>
+              <div class="v">{{ dev.status.mobileData }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.dnd">
+              <div class="k">🌙 {{ t('device.dnd') }}</div>
+              <div class="v">{{ dev.status.dnd }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.ringer">
+              <div class="k">🔔 {{ t('device.ringer') }}</div>
+              <div class="v">{{ dev.status.ringer }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.heartRate">
+              <div class="k">❤️ {{ t('device.heartRate') }}</div>
+              <div class="v red">{{ dev.status.heartRate }} <span style="font-size:15px">BPM</span></div>
+              <div class="sub" v-if="dev.status.heartMax || dev.status.heartAvg">
+                {{ t('device.heartMax') }} {{ dev.status.heartMax || '--' }} · {{ t('device.heartAvg') }} {{ dev.status.heartAvg || '--' }}
+              </div>
+              <div class="sub" v-if="dev.status.heartAgo">{{ dev.status.heartAgo }}</div>
+            </div>
+            <div class="dstat-tile wide" v-if="dev.status && dev.status.locationText">
+              <div class="k">📍 {{ t('device.location') }}</div>
+              <div class="v sm">{{ dev.status.locationText }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.lastUnlock">
+              <div class="k">🔓 {{ t('device.lastUnlock') }}</div>
+              <div class="v sm">{{ dev.status.lastUnlock }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.lastScreenOff">
+              <div class="k">🔒 {{ t('device.lastScreenOff') }}</div>
+              <div class="v sm">{{ dev.status.lastScreenOff }}</div>
+            </div>
+            <div class="dstat-tile" v-if="dev.status && dev.status.model">
+              <div class="k">📱 {{ t('device.type') }}</div>
+              <div class="v">{{ dev.status.model }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="Object.keys(devices).length === 0" style="text-align:center;color:#94a3b8;padding:40px 10px;font-size:15px;white-space:pre-line">
+        {{ t('app.noDevices') }}
+      </div>
+    </div>
+  </aside>
+
+  <!-- 监控面板：居中可爱布局（虚线胶囊 + 发光对话卡） -->
+  <main class="main" v-if="route === 'app'">
+    <div class="wrap">
+      <!-- 顶部：大标题 / 问候 + 在线人数 / 时钟 -->
+      <header class="hero">
+        <div class="hero-left">
+          <h1 class="hero-title">stalk<span>Now</span></h1>
+          <div class="hero-greet">{{ t('panel.greeting') }}</div>
+        </div>
+        <div class="hero-right">
+          <span class="hero-watch">👁️ {{ tpl('panel.watching', { n: viewerCount }) }}</span>
+          <span class="hero-clock">{{ clockText }}</span>
+          <button class="theme-btn" @click="toggleTheme"
+                  :title="themeMode === 'light' ? t('theme.light') : t('theme.dark')">
+            {{ themeMode === 'light' ? '☀️' : '🌙' }}
+          </button>
+          <button class="theme-btn" @click="toggleLang" :title="t('lang.switch')" style="font-size:14px;font-weight:600">
+            {{ t('lang.code') }}
+          </button>
+        </div>
+      </header>
+
+      <!-- PANELS：虚线胶囊（点击平滑滚动到对应板块） -->
+      <div class="panels-bar">
+        <span class="panels-label">PANELS</span>
+        <div class="panels-chips">
+          <button class="pchip" @click="scrollToPanel('stream')">📋 {{ t('stream.title') }}</button>
+          <button class="pchip" @click="scrollToPanel('summary')">📊 {{ t('summary.title') }}</button>
+          <button class="pchip" @click="scrollToPanel('active')">🕒 {{ t('active.title') }}</button>
+          <button class="pchip" @click="scrollToPanel('weather')">🌤️ {{ t('insight.weather') }}</button>
+          <button class="pchip" :class="{ on: showInteractive }" @click="showInteractive = !showInteractive">💬 {{ t('device.interactive') }}</button>
+        </div>
+      </div>
+
+      <!-- 此刻：发光对话卡（大表情 + 一句状态） -->
+      <section class="now-card">
+        <div class="now-emoji">{{ nowEmoji }}</div>
+        <div class="now-line">{{ currentDoing }}</div>
+        <div class="now-sub">{{ tpl('panel.onlineSummary', { on: onlineCount, all: sortedDevices.length }) }} · {{ t('app.syncing') }}</div>
+      </section>
+
+      <div class="dashed-line"></div>
+
+      <div class="boards">
+        <!-- 今日总结 -->
+        <div class="panel-block" id="panel-summary">
+          <div class="section-title">
+            <span>{{ t('summary.title') }}</span>
+          </div>
+          <div class="overview" style="margin-bottom:20px">
+            <div class="stat-card">
+              <div class="label">{{ t('summary.openedApps') }}</div>
+              <div class="value">{{ summary.openedApps || 0 }}</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">{{ t('summary.totalTime') }}</div>
+              <div class="value blue">{{ formatDuration(summary.totalSeconds || 0) }}</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">{{ t('summary.mostUsed') }}</div>
+              <div class="value purple" style="font-size:16px">
+                {{ summary.mostUsed ? summary.mostUsed.app + ' · ' + formatDuration(summary.mostUsed.seconds) : t('summary.none') }}
+              </div>
+            </div>
+          </div>
+
+          <!-- 作息类洞察 + AI 深读结果：并入今日总结板块，不单独成卡 -->
+          <div v-if="panelInsights('summary').length || aiText" class="inline-insights" style="margin-bottom:20px">
+            <div v-for="it in panelInsights('summary')" :key="it.text" class="insight-item">
+              <span class="ico">{{ it.icon }}</span>
+              <span class="txt">{{ it.text }}</span>
+            </div>
+            <div v-if="aiText" class="insight-ai">🤖 {{ aiText }}</div>
+          </div>
+        </div>
+
+        <!-- 主网格：监听流为核心板块，第一眼看到 -->
+        <div class="grid main-grid">
+          <!-- 左列（主）: 实时监听流 -->
+          <div id="panel-stream">
+            <div class="card">
+              <div class="card-header">
+                <h3><span class="icon">📋</span> {{ t('stream.title') }}</h3>
+                <div class="date-picker">
+                  <button @click="shiftDate(-1)" :title="t('stream.prevDay')">◀</button>
+                  <span class="date" @click="openDatePicker" :title="t('stream.pickDate')">{{ streamDateLabel }}<em v-if="isToday" style="font-style:normal;opacity:.7"> · {{ t('stream.today') }}</em></span>
+                  <button @click="shiftDate(1)" :disabled="!canGoNext" :title="t('stream.nextDay')">▶</button>
+                  <span class="icon" @click="openDatePicker" :title="t('stream.pickDate')">📅</span>
+                  <input ref="dateInput" type="date" class="date-input-hidden" :value="streamDate" :max="todayKey" @change="onPickDate">
+                </div>
+              </div>
+              <div class="card-body stream-body">
+                <!-- 当前活动置顶：仅「正在使用」+ 已使用时长，放大字体 -->
+                <div v-for="(item, id) in currentActivityList" :key="'cur'+id" class="current-box current-box-lg" style="margin:14px 16px 6px">
+                  <div class="app">{{ doingText(item.currentApp, item.activityPhrase) }}</div>
+                  <div class="timer">⏱️ {{ t('stream.usingFor') }} {{ formatDuration(item.duration) }}</div>
+                </div>
+                <!-- 最新的排在最上面，新记录从上方渐入，不用往下翻 -->
+                <transition-group name="stream" tag="div">
+                  <div v-for="act in filteredActivity" :key="act.id" class="activity-item">
+                    <span class="time">{{ formatTime(act.startTime) }}</span>
+                    <div class="content">
+                      <div class="app-name" :class="{ lock: act.appName === '🔒 熄屏' }">
+                        {{ act.appName === '🔒 熄屏' ? act.appName : doingText(act.appName, act.activityPhrase) }}
+                        <span v-if="act.endTime" class="duration">
+                          {{ t('stream.used') }} {{ formatDuration((act.endTime - act.startTime) / 1000) }}
+                        </span>
+                        <span v-else class="duration live">{{ t('stream.live') }}</span>
+                      </div>
+                      <div class="detail-line" v-if="act.detail">{{ act.detail }}</div>
+                    </div>
+                  </div>
+                </transition-group>
+                <div v-if="filteredActivity.length === 0" style="padding:40px;text-align:center;color:#94a3b8;font-size:15px">
+                  {{ t('stream.noData') }}
+                </div>
+              </div>
+              <!-- 位置/运动/在线类洞察：挂在监听流卡片底部（不随列表滚动） -->
+              <div v-if="panelInsights('stream').length" class="inline-insights"
+                   style="border-top:1px solid rgba(148,163,184,.22);padding:6px 20px 12px">
+                <div v-for="it in panelInsights('stream')" :key="it.text" class="insight-item">
+                  <span class="ico">{{ it.icon }}</span>
+                  <span class="txt">{{ it.text }}</span>
+                  <span class="tag">{{ it.tag }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右列（辅）: 天气 + 今日应用排行 -->
+          <div>
+            <!-- 天气组件 -->
+            <div class="weather-card" id="panel-weather" style="margin-bottom:12px">
+              <div class="loc">{{ t('weather.ipPrefix') }}{{ weather.ip || '--' }}{{ t('weather.atPrefix') }}{{ weather.city || '--' }}{{ weather.region ? ' · ' + weather.region : '' }}</div>
+              <div class="temp">{{ weather.temp || '--' }}°</div>
+              <div class="desc">{{ weather.text || t('weather.loading') }}</div>
+              <div class="extra">
+                <span>🌡️ {{ t('weather.feelsLike') }} {{ weather.feelsLike || '--' }}°</span>
+                <span>💧 {{ weather.humidity || '--' }}%</span>
+                <span>🌬️ {{ weather.windDir || '' }} {{ weather.windScale || '' }}</span>
+                <span v-if="weather.aqi != null">😷 AQI {{ weather.aqi }} {{ weather.aqiLevel }}</span>
+              </div>
+              <div v-for="it in panelInsights('weather')" :key="it.text" class="weather-tip">
+                {{ it.icon }} {{ it.text }}
+              </div>
+            </div>
+
+            <!-- 专注类洞察：贴着天气面板 -->
+            <div v-if="panelInsights('current').length" class="inline-insights" style="margin:12px 0">
+              <div v-for="it in panelInsights('current')" :key="it.text" class="insight-item">
+                <span class="ico">{{ it.icon }}</span>
+                <span class="txt">{{ it.text }}</span>
+                <span class="tag">{{ it.tag }}</span>
+              </div>
+            </div>
+
+            <!-- 今日应用排行 -->
+            <div class="card" style="margin-top:12px">
+              <div class="card-header">
+                <h3><span class="icon">🏆</span> {{ t('rank.title') }}</h3>
+                <span style="font-size:14px;color:#94a3b8">{{ (summary.perApp || []).length }} {{ t('rank.apps') }}</span>
+              </div>
+              <div class="rank-list">
+                <div v-for="item in (summary.perApp || [])" :key="item.app" class="rank-row">
+                  <div class="head">
+                    <span>{{ item.app }}</span>
+                    <span class="sec">{{ formatDuration(item.seconds) }}</span>
+                  </div>
+                  <div class="rank-bar"><i :style="{ width: rankPct(item.seconds) }"></i></div>
+                </div>
+                <!-- 应用/音乐类洞察：并入今日应用排行 -->
+                <div v-if="panelInsights('rank').length" class="inline-insights"
+                     style="border-top:1px solid rgba(148,163,184,.22);padding:6px 20px 12px">
+                  <div v-for="it in panelInsights('rank')" :key="it.text" class="insight-item">
+                    <span class="ico">{{ it.icon }}</span>
+                    <span class="txt">{{ it.text }}</span>
+                    <span class="tag">{{ it.tag }}</span>
+                  </div>
+                </div>
+                <div v-if="!(summary.perApp || []).length" class="insight-empty">{{ t('rank.noData') }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 活跃时段：左=贡献墙，右=今日柱状图，各占 50%，标题置于各自上方 -->
+        <div class="card active-card" id="panel-active" style="margin-bottom:20px">
+          <div class="card-header">
+            <h3><span class="icon">🕒</span> {{ t('active.title') }}</h3>
+          </div>
+          <div class="card-body" style="padding-top:12px">
+            <div class="active-row">
+              <!-- 左列：活跃贡献墙 -->
+              <div class="active-left">
+                <h4 class="active-subtitle">{{ tpl('active.heatmapTitle', { n: heatmap.days }) }}</h4>
+                <div class="heatmap-wrap">
+                  <div class="gh-heat" v-if="(heatmap.weeks || []).length">
+                    <div class="gh-months">
+                      <span v-for="(m, i) in heatmapMonths" :key="'m'+i">{{ m }}</span>
+                    </div>
+                    <div class="gh-body">
+                      <div class="gh-days">
+                        <span v-for="(d, di) in ghWeekdays" :key="'d'+di">{{ d }}</span>
+                      </div>
+                      <div class="gh-grid">
+                        <div v-for="(cell, i) in heatmapCells" :key="i"
+                             class="gh-cell" :class="{ empty: !cell }"
+                             :style="{ background: cell ? heatmapColor(cell.seconds, heatmap.max) : 'transparent' }">
+                          <span class="gh-tip" v-if="cell">{{ heatmapDayLabel(cell.date) }} · {{ formatDuration(cell.seconds) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="insight-empty">{{ t('active.noHistory') }}</div>
+                </div>
+                <div class="hm-legend">
+                  <span>{{ t('active.less') }}</span>
+                  <i class="hm-l0"></i><i class="hm-l1"></i><i class="hm-l2"></i><i class="hm-l3"></i><i class="hm-l4"></i>
+                  <span>{{ t('active.more') }}</span>
+                </div>
+              </div>
+
+              <!-- 右列：今日 24 小时使用分布（ApexCharts 渐变面积图） -->
+              <div class="active-right">
+                <h4 class="active-subtitle">{{ t('active.hourlyTitle') }}</h4>
+                <div class="hourly-chart-wrap" style="position:relative;height:200px">
+                  <div ref="hourlyChartEl" id="hourlyApex" style="width:100%;height:100%"></div>
+                  <div v-if="hourlyMax === 0" class="insight-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">{{ t('stream.noData') }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右下角客服式浮动弹窗：聊天室 / AI 对话 -->
+        <div class="fab-wrap">
+          <div class="fab-panel" v-if="fabOpen">
+              <div class="fab-head">
+                <div class="fab-tabs">
+                  <button v-if="showInteractive" :class="{ on: fab === 'chat' }" @click="fab = 'chat'">💬 {{ t('fab.chat') }} · {{ chat.length }}</button>
+                  <button :class="{ on: fab === 'ai' }" @click="fab = 'ai'">🤖 {{ t('fab.ai') }}</button>
+                </div>
+                <button class="fab-close" @click="fabOpen = false" :title="t('fab.close')">✕</button>
+              </div>
+              <div class="fab-body">
+                <!-- 聊天室 -->
+                <div v-show="fab === 'chat'" class="chat-area">
+                  <div class="chat-list" ref="chatList">
+                    <div v-for="msg in chat" :key="msg.id" class="chat-msg">
+                      <div class="nick" :class="{ me: msg.nickname === myNickname }">{{ msg.nickname }} · {{ formatTime(msg.timestamp) }}</div>
+                      <div class="bubble">{{ msg.message }}</div>
+                    </div>
+                  </div>
+                  <div class="chat-input">
+                    <input v-model="chatDraft" @keyup.enter="sendChat" maxlength="500" :placeholder="t('chat.placeholder')">
+                    <button @click="sendChat">{{ t('chat.send') }}</button>
+                  </div>
+                </div>
+                <!-- AI 对话 -->
+                <div v-show="fab === 'ai'" class="ai-area">
+                  <div class="ai-list" ref="aiList">
+                    <div v-for="(msg, idx) in aiHistory" :key="idx" class="ai-msg" :class="msg.role">
+                      <div class="role">{{ msg.role === 'user' ? t('fab.roleUser') : 'AI' }}</div>
+                      <div class="bubble">{{ msg.content }}</div>
+                    </div>
+                    <div v-if="aiHistory.length === 0" style="padding:30px;text-align:center;color:#94a3b8;font-size:15px">
+                      {{ t('ai.emptyTitle') }}<br>
+                      "{{ t('ai.emptyHint1') }}"<br>
+                      "{{ t('ai.emptyHint2') }}"
+                    </div>
+                  </div>
+                  <div class="ai-input">
+                    <textarea v-model="aiDraft" @keyup.enter.exact="sendAi" maxlength="2000" :placeholder="t('ai.placeholder')" :disabled="aiLoading"></textarea>
+                    <button @click="sendAi" :disabled="aiLoading">{{ aiLoading ? t('ai.thinking') : t('ai.send') }}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <div class="fab-btns">
+            <button v-if="showInteractive" class="fab-btn chat" @click="toggleFab('chat')" :title="fabOpen && fab === 'chat' ? t('fab.closeChat') : t('fab.openChat')">
+              💬
+              <span v-if="chatUnread > 0" class="dot">{{ chatUnread > 99 ? '99+' : chatUnread }}</span>
+            </button>
+            <button class="fab-btn ai" @click="toggleFab('ai')" :title="fabOpen && fab === 'ai' ? t('fab.closeAi') : t('fab.openAi')">🤖</button>
+          </div>
+        </div>
+
+        <!-- Windows 风格右下角通知：聊天室新消息 -->
+        <div class="toast-container">
+          <transition-group name="toast">
+            <div v-for="t in toasts" :key="t.id" class="toast-item" @click="openChatFromToast(t)">
+              <span class="t-ico">💬</span>
+              <div class="t-body">
+                <div class="t-title">{{ t.nickname }}</div>
+                <div class="t-msg">{{ t.message }}</div>
+              </div>
+              <button class="t-close" @click.stop="dismissToast(t.id)">✕</button>
+            </div>
+          </transition-group>
+        </div>
+      </div><!-- /.boards -->
+
+      <footer class="panel-footer">
+        stalk · {{ tpl('panel.footerPanels', { n: sortedDevices.length }) }} · {{ t('panel.refresh') }} · (・ω・)
+      </footer>
+    </div><!-- /.wrap -->
+  </main>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.2/dist/apexcharts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<script src="/js/i18n.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/effects.js"></script>
+<script src="/js/security.js"></script>
+</body>
+</html>

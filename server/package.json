@@ -1,0 +1,17 @@
+{
+  "name": "stalk-server",
+  "version": "1.0.0",
+  "description": "stalk · 视奸 后端 - 设备在线状态 + 应用监听 + 聊天室",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "axios": "^1.7.2"
+  }
+}

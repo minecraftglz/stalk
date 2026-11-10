@@ -1,0 +1,18 @@
+# stalk 监控面板：接入 halo-net，由 caddy 反代（stalk:8080）
+services:
+  stalk:
+    image: docker.m.daocloud.io/library/node:20-alpine
+    container_name: stalk
+    networks:
+      - halo-net
+    working_dir: /app/server
+    command: node server.js
+    volumes:
+      - /root/stalk:/app
+    environment:
+      - TZ=Asia/Shanghai
+    restart: always
+
+networks:
+  halo-net:
+    external: true
